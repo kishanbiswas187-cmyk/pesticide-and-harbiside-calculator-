@@ -1,201 +1,117 @@
-// script.js
 
-// ---------- Crop Data ----------
-const crops = [
-  { name: 'Tomato', family: 'nightshade', emoji: '🍅' },
-  { name: 'Corn', family: 'grass', emoji: '🌽' },
-  { name: 'Bean', family: 'legume', emoji: '🫘' },
-  { name: 'Carrot', family: 'umbellifer', emoji: '🥕' },
-  { name: 'Lettuce', family: 'aster', emoji: '🥬' },
-  { name: 'Pepper', family: 'nightshade', emoji: '🫑' },
-  { name: 'Pea', family: 'legume', emoji: '🫛' },
-  { name: 'Onion', family: 'allium', emoji: '🧅' }
-];
+const products = {
+  glyphosate: { name: 'Glyphosate 41%', rate: 1.5, unit: 'L' },
+  '2,4-d': { name: '2,4-D Amine', rate: 1.0, unit: 'L' },
+  atrazine: { name: 'Atrazine 90DF', rate: 2.0, unit: 'lb' },
+  custom: { name: 'Custom', rate: null, unit: null }
+};
 
-// Grid configuration
-const GRID_SIZE = 4; // 4x4
-let plots = []; // 2D array storing crop objects (or null)
+const areaToAcres = {
+  acre: 1,
+  ha: 2.47105,
+  m2: 0.000247105
+};
+
+
+const waterToLiters = {
+  L: 1,
+  gal: 3.78541
+};
 
 // DOM elements
-const farmGrid = document.getElementById('farmGrid');
-const cropListDiv = document.getElementById('cropList');
-const saveBtn = document.getElementById('saveBtn');
-const loadBtn = document.getElementById('loadBtn');
-const clearBtn = document.getElementById('clearBtn');
+const areaInput = document.getElementById('area');
+const areaUnitSelect = document.getElementById('areaUnit');
+const productSelect = document.getElementById('product');
+const customRateGroup = document.getElementById('customRateGroup');
+const customRateInput = document.getElementById('customRate');
+const customUnitSelect = document.getElementById('customUnit');
+const waterRateInput = document.getElementById('waterRate');
+const waterUnitSelect = document.getElementById('waterUnit');
+const calculateBtn = document.getElementById('calculateBtn');
+const productAmountP = document.getElementById('productAmount');
+const waterAmountP = document.getElementById('waterAmount');
+const totalMixP = document.getElementById('totalMix');
 
-// Drag state
-let draggedCrop = null;
-
-// ---------- Initialize ----------
-function initGrid() {
-  // Create empty plots
-  plots = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(null));
-  renderGrid();
-}
-
-function renderGrid() {
-  farmGrid.innerHTML = '';
-  for (let row = 0; row < GRID_SIZE; row++) {
-    for (let col = 0; col < GRID_SIZE; col++) {
-      const plot = document.createElement('div');
-      plot.className = 'plot';
-      plot.dataset.row = row;
-      plot.dataset.col = col;
-
-      const crop = plots[row][col];
-      if (crop) {
-        plot.textContent = crop.emoji + ' ' + crop.name;
-        plot.style.backgroundColor = '#c3e0b2'; // planted color
-      } else {
-        plot.textContent = '⬜';
-        plot.style.backgroundColor = '#d4c9a6';
-      }
-
-      // Allow dropping on plots
-      plot.addEventListener('dragover', (e) => e.preventDefault());
-      plot.addEventListener('drop', handleDrop);
-
-      // Click to show warning (or remove crop with double-click)
-      plot.addEventListener('click', () => checkRotationForPlot(row, col));
-      plot.addEventListener('dblclick', () => removeCrop(row, col));
-
-      farmGrid.appendChild(plot);
-    }
+productSelect.addEventListener('change', function() {
+  if (this.value === 'custom') {
+    customRateGroup.classList.remove('hidden');
+  } else {
+    customRateGroup.classList.add('hidden');
   }
-}
+});
 
-// Populate crop sidebar
-function renderCropList() {
-  cropListDiv.innerHTML = '';
-  crops.forEach(crop => {
-    const item = document.createElement('div');
-    item.className = 'crop-item';
-    item.textContent = crop.emoji + ' ' + crop.name;
-    item.draggable = true;
-    item.dataset.crop = JSON.stringify(crop);
-    item.addEventListener('dragstart', handleDragStart);
-    item.addEventListener('dragend', handleDragEnd);
-    cropListDiv.appendChild(item);
-  });
-}
 
-// Drag handlers
-function handleDragStart(e) {
-  draggedCrop = JSON.parse(e.target.dataset.crop);
-  e.dataTransfer.setData('text/plain', e.target.dataset.crop);
-  e.target.style.opacity = '0.5';
-}
-
-function handleDragEnd(e) {
-  e.target.style.opacity = '1';
-}
-
-function handleDrop(e) {
-  e.preventDefault();
-  if (!draggedCrop) return;
-
-  const row = parseInt(e.target.dataset.row);
-  const col = parseInt(e.target.dataset.col);
-  
-  // Assign crop to plot
-  plots[row][col] = { ...draggedCrop };
-  
-  // Clear drag state
-  draggedCrop = null;
-  
-  // Re-render grid and check warnings
-  renderGrid();
-  checkAllWarnings();
-}
-
-// Remove crop from a plot
-function removeCrop(row, col) {
-  plots[row][col] = null;
-  renderGrid();
-  checkAllWarnings();
-}
-
-// ---------- Rotation Warning Logic ----------
-function checkRotationForPlot(row, col) {
-  const crop = plots[row][col];
-  if (!crop) {
-    alert('This plot is empty.');
+calculateBtn.addEventListener('click', function() {
+ 
+  const areaValue = parseFloat(areaInput.value);
+  if (isNaN(areaValue) || areaValue <= 0) {
+    alert('Please enter a valid positive area.');
     return;
   }
+  const areaUnit = areaUnitSelect.value;
+  const areaAcres = areaValue * areaToAcres[areaUnit];
 
-  // Check adjacent plots (up, down, left, right) for same family
-  const neighbors = [
-    [row-1, col], [row+1, col], [row, col-1], [row, col+1]
-  ];
-  const sameFamilyNeighbors = neighbors.filter(([r, c]) => 
-    r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE &&
-    plots[r][c] && plots[r][c].family === crop.family
-  );
 
-  if (sameFamilyNeighbors.length > 0) {
-    alert(`⚠️ Warning: ${crop.name} (${crop.family}) is next to same-family crops!`);
-  } else {
-    alert(`✅ ${crop.name} is safely placed.`);
-  }
-}
+  let productRate, productUnit;
+  const selectedProduct = productSelect.value;
 
-function checkAllWarnings() {
-  // Clear previous warning styles
-  document.querySelectorAll('.plot').forEach(plot => plot.classList.remove('warning'));
-
-  for (let row = 0; row < GRID_SIZE; row++) {
-    for (let col = 0; col < GRID_SIZE; col++) {
-      const crop = plots[row][col];
-      if (!crop) continue;
-
-      // Check neighbors
-      const neighbors = [
-        [row-1, col], [row+1, col], [row, col-1], [row, col+1]
-      ];
-      const hasWarning = neighbors.some(([r, c]) => 
-        r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE &&
-        plots[r][c] && plots[r][c].family === crop.family
-      );
-
-      if (hasWarning) {
-        const plotElement = document.querySelector(`.plot[data-row="${row}"][data-col="${col}"]`);
-        if (plotElement) plotElement.classList.add('warning');
-      }
+  if (selectedProduct === 'custom') {
+    productRate = parseFloat(customRateInput.value);
+    productUnit = customUnitSelect.value;
+    if (isNaN(productRate) || productRate <= 0) {
+      alert('Please enter a valid custom product rate.');
+      return;
     }
-  }
-}
-
-// ---------- Save / Load with localStorage ----------
-function savePlan() {
-  localStorage.setItem('cropRotationPlan', JSON.stringify(plots));
-  alert('Plan saved!');
-}
-
-function loadPlan() {
-  const saved = localStorage.getItem('cropRotationPlan');
-  if (saved) {
-    plots = JSON.parse(saved);
-    renderGrid();
-    checkAllWarnings();
-    alert('Plan loaded!');
   } else {
-    alert('No saved plan found.');
+    productRate = products[selectedProduct].rate;
+    productUnit = products[selectedProduct].unit;
   }
-}
 
-function clearGrid() {
-  if (confirm('Clear all plots?')) {
-    plots = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(null));
-    renderGrid();
-    checkAllWarnings();
+
+  const totalProduct = productRate * areaAcres;
+
+ 
+  const waterRateValue = parseFloat(waterRateInput.value);
+  if (isNaN(waterRateValue) || waterRateValue <= 0) {
+    alert('Please enter a valid water volume per acre.');
+    return;
   }
-}
+  const waterUnit = waterUnitSelect.value;
+  const waterRateLitersPerAcre = waterRateValue * waterToLiters[waterUnit];
 
-// ---------- Event Listeners ----------
-saveBtn.addEventListener('click', savePlan);
-loadBtn.addEventListener('click', loadPlan);
-clearBtn.addEventListener('click', clearGrid);
+ 
+  const totalWaterLiters = waterRateLitersPerAcre * areaAcres;
 
-// Initialize
-initGrid();
-renderCropList();
+ 
+  let totalMixVolume = totalWaterLiters;
+  if (productUnit === 'L' || productUnit === 'gal') {
+   
+    let productLiters = totalProduct;
+    if (productUnit === 'gal') {
+      productLiters = totalProduct * 3.78541;
+    }
+    totalMixVolume += productLiters;
+  }
+
+
+  let productDisplay = `${totalProduct.toFixed(2)} ${productUnit}`;
+ 
+  if (areaUnit !== 'acre' && productUnit) {
+
+  }
+
+  productAmountP.textContent = `🧴 Product needed: ${productDisplay}`;
+
+ 
+  let waterDisplay, totalDisplay;
+  if (waterUnit === 'gal') {
+    waterDisplay = (totalWaterLiters / 3.78541).toFixed(2) + ' gal';
+    totalDisplay = (totalMixVolume / 3.78541).toFixed(2) + ' gal';
+  } else {
+    waterDisplay = totalWaterLiters.toFixed(2) + ' L';
+    totalDisplay = totalMixVolume.toFixed(2) + ' L';
+  }
+
+  waterAmountP.textContent = `💧 Water needed: ${waterDisplay}`;
+  totalMixP.textContent = `🧪 Total spray mixture: ${totalDisplay}`;
+});
